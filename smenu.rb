@@ -8,7 +8,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2019-02-21 - 09:33
 #      License: MIT
-#  Last update: 2019-02-21 12:26
+#  Last update: 2019-02-21 23:38
 # ----------------------------------------------------------------------------- #
 #  smenu.rb  Copyright (C) 2012-2019 j kepler
 # v1 - printed all lines after each press resulting in flicker
@@ -82,7 +82,8 @@ class Smenu
         system("tput el")
         puts "#{marker} #{e}" 
       else
-        puts
+        system("tput cud1")  # go down a line
+        #puts
       end
     }
   end
@@ -166,5 +167,5 @@ if __FILE__ == $0
     1.times { system "tput cuu1;" }
   end
   #system "tput rmcup"
-  puts sel
+  puts sel if sel
 end
