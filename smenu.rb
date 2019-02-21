@@ -8,13 +8,15 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2019-02-21 - 09:33
 #      License: MIT
-#  Last update: 2019-02-21 11:23
+#  Last update: 2019-02-21 12:23
 # ----------------------------------------------------------------------------- #
 #  smenu.rb  Copyright (C) 2012-2019 j kepler
 # v1 - printed all lines after each press resulting in flicker
 # v2 - print only affected two lines (prev and current index)
 # v3 - a separate version which allows printing detail below for curr index
 
+# 2019-02-21 - this passes a block so we can print below. but we need to ensure
+#   we back up as many rows as we write. would have been nice to save and restore cursor
 require 'io/wait'
 def char_if_pressed
   #cn = nil
@@ -91,6 +93,7 @@ def run ch
   end
   prev_index = index = 0
   printed = false
+  begin
   system "tput civis" # hide cursor
   while true
     #system "clear" # we should only clear from where we print get cursor pos
@@ -100,6 +103,11 @@ def run ch
       print_full(ch, index) unless printed
       printed = true
     end
+    # TODO save cursor here
+    #system "tput sc"
+    yield index if block_given?
+    # TODO restore cursor here
+    #system "tput rc"
     c = char_if_pressed
 
     # clear as many lines as printed only
@@ -139,10 +147,21 @@ def run ch
     index = 0 if index < 0
     index = ch.size-1 if index > ch.size-1
   end
+  ensure
   system "tput cnorm" # unhide cursor
+  end
 end
-#system "tput smcup"
-choices = %w{ ruby perl golang elixir }
-sel = run choices
-#system "tput rmcup"
-puts sel
+if __FILE__ == $0
+  #system "tput smcup"
+  choices = %w{ ruby perl go elixir }
+  sel = run choices do |ix|
+    system "tput el" 
+    lang = choices[ix]
+    puts "You selected #{lang}"
+    #str = %x{ brew info #{lang} 2>/dev/null | head -n 3 }
+    #puts str
+    1.times { system "tput cuu1;" }
+  end
+  #system "tput rmcup"
+  puts sel
+end
