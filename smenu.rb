@@ -1,20 +1,26 @@
 #!/usr/bin/env ruby
+# ----------------------------------------------------------------------------- #
+#         File: smenu.rb
+#  Description:  This program displays a list and allows user to select
+#                with arrow keys and ENTER. q to quit.
+#                It does not clear screen but only the lines it prints on. 
+#                It is meant to be a simple version of `smenu`.
+#       Author: j kepler  http://github.com/mare-imbrium/canis/
+#         Date: 2019-02-21 - 09:33
+#      License: MIT
+#  Last update: 2019-02-21 11:23
+# ----------------------------------------------------------------------------- #
+#  smenu.rb  Copyright (C) 2012-2019 j kepler
+# v1 - printed all lines after each press resulting in flicker
+# v2 - print only affected two lines (prev and current index)
+# v3 - a separate version which allows printing detail below for curr index
 
-# this program displays a list and allows user to select
-# with arrow keys and ENTER. q to quit.
-# It does not clear screen but only the lines it prints on. It is meant
-# to be a simple version of `smenu`.
-# Last Update:2019-02-21 00:07
-# Rahul Kumar 2019.
 require 'io/wait'
 def char_if_pressed
   #cn = nil
   begin
     system("stty raw -echo 2>/dev/null") # turn raw input on
-    c = nil
-    #if $stdin.ready?
-      c = $stdin.getc
-    #end
+    c = $stdin.getc
     if c == ''
       buff = c.chr
       while true
@@ -35,40 +41,77 @@ def char_if_pressed
     when 9
       return "TAB"
     end
-
-    
     c.chr if c
   ensure
     system "stty -raw echo 2>/dev/null" # turn raw input off
   end
 end
 
-def run ch
-  Signal.trap("INT") do # SIGINT = control-C
-    exit
-  end
-  i = 0
-  index = 0
-  while true
-    #system "clear" # we should only clear from where we print get cursor pos
+$sel_marker = 'o'
+$uns_marker = ' '
+
+def print_full ch, index
     ch.each_with_index { |e, ix|
       if ix == index
-        marker = 'x'
+        marker = $sel_marker
       else
-        marker = ' '
+        marker = $uns_marker
       end
       puts "#{marker} #{e}"
     }
+
+end
+def print_partial ch, prev_index, index
+  # 
+  # only print for two given indices
+  # there is still some flicker since I am still printing a puts for the non lines
+  # I don't know current cursor pos, so i can just jump to that position
+  lines = ch.size 
+  lines.times { system "tput cuu1;" }
+  ch.each_with_index { |e, ix|
+      marker = nil
+      if ix == index
+        marker = $sel_marker
+      elsif ix == prev_index
+        marker = $uns_marker
+      end
+      if marker
+        system("tput el")
+        puts "#{marker} #{e}" 
+      else
+        puts
+      end
+    }
+end
+
+def run ch
+  Signal.trap("INT") do # SIGINT = control-C
+    system "tput cnorm"
+    exit
+  end
+  prev_index = index = 0
+  printed = false
+  system "tput civis" # hide cursor
+  while true
+    #system "clear" # we should only clear from where we print get cursor pos
+    if printed
+      print_partial ch, prev_index, index
+    else
+      print_full(ch, index) unless printed
+      printed = true
+    end
     c = char_if_pressed
 
     # clear as many lines as printed only
-    lines = ch.size 
-    lines.times { system "tput cuu1;tput el" }
+    #lines = ch.size 
+    #lines.times { system "tput cuu1;tput el" }
+    #lines.times { system "tput cuu1;" }
     # TODO to prevent flicker only clear the TWO lines to change and print them
     # only if index has changed
     # -------
 
     break if c == 113 or c == 'q'
+    prev_index = index
     case c
     when 'j', "TAB"
       index += 1
@@ -87,15 +130,16 @@ def run ch
     when "[D"
       index -= 1
     when "[H"
-      index = 0
+      index = 0           # avoid this since we only want two consecutive lines affected
     when "[F"
-      index = ch.size - 1
+      index = ch.size - 1 # avoid this since we only want two consecutive lines affected
     else
-      sleep 4
+      ; # nothing yet
     end
     index = 0 if index < 0
     index = ch.size-1 if index > ch.size-1
   end
+  system "tput cnorm" # unhide cursor
 end
 #system "tput smcup"
 choices = %w{ ruby perl golang elixir }
