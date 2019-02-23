@@ -5,7 +5,7 @@
 #                for current line.
 #       Author:  r kumar
 #         Date: 2019-02-21 - 12:27
-#  Last update: 2019-02-22 14:49
+#  Last update: 2019-02-22 15:12
 #      License: MIT License
 # ----------------------------------------------------------------------------- #
 #
@@ -88,6 +88,18 @@ end # }}}
         puts e
       end
     end
+    def get_rows selected, db
+      cols = db.columns(selected)
+      columns = cols[0,3].join(",")
+      max_rows = 5
+      statement = "SELECT #{columns} FROM #{selected} LIMIT #{max_rows}"
+      res = db.execute(statement)
+      #logger.debug res.class
+      res = res.join("\n")
+      rs = %x{ echo "#{res}" | column -t -s'|' -c 80 }
+      rs = rs.split("\n")
+      return rs
+    end
 
 if __FILE__ == $0
   include Color
@@ -129,7 +141,7 @@ if __FILE__ == $0
     #puts "#{_tables} #{_tables.count}"
     menu = Smenu.new
     scrollrows = _MAX_ROWS + 1
-    selected = menu.run _tables do |ix|
+    selected = menu.run _tables do |ix, key|
       tb = _tables[ix]
       cols = db.columns(tb)
       rows = db.row_count(tb)
@@ -144,7 +156,10 @@ if __FILE__ == $0
     if selected
       cols = db.columns(selected)
       system "tput ed"
-      printdata cols, selected, db, _MAX_ROWS
+      rs = get_rows selected, db
+      sm = Smenu.new
+      sm.run rs
+      #printdata cols, selected, db, _MAX_ROWS
       if false
       puts
       puts "SELECT"
