@@ -8,18 +8,30 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2019-02-21 - 09:33
 #      License: MIT
-#  Last update: 2019-02-21 23:38
+#  Last update: 2019-02-23 09:37
 # ----------------------------------------------------------------------------- #
 #  smenu.rb  Copyright (C) 2012-2019 j kepler
 # v1 - printed all lines after each press resulting in flicker
 # v2 - print only affected two lines (prev and current index)
 # v3 - a separate version which allows printing detail below for curr index
+# TODO 2019-02-22 - handle scrolling
 
 # 2019-02-21 - this passes a block so we can print below. but we need to ensure
 #   we back up as many rows as we write. would have been nice to save and restore cursor
+# NOTE: print_partial was fine as long as there was no scrolling. with scrolling, 
+#       we need to print all rows again. 2019-02-23 
 require 'io/wait'
 class Smenu
-  def char_if_pressed
+  attr_accessor :display_lines
+  attr_accessor :transpose_flag
+  def initialize
+    @display_lines = 3
+    @transpose_flag = false
+    @start_row = 0
+  end
+  $sel_marker = '*'
+  $uns_marker = ' '
+  def char_if_pressed  # {{{
     #cn = nil
     begin
       system("stty raw -echo 2>/dev/null") # turn raw input on
@@ -38,23 +50,47 @@ class Smenu
         end
       end
       cn = c.ord
+      if cn >= 0 and cn < 27
       case cn
       when 13,10
         return "ENTER"
       when 9
         return "TAB"
+      else
+        x = cn + 96
+        return "C-#{x.chr}"
+      end
       end
       c.chr if c
     ensure
       system "stty -raw echo 2>/dev/null" # turn raw input off
     end
+  end  # }}}
+
+  def fix_rows index, ch
+    @last_row = @start_row + @display_lines - 1
+    if index > @last_row 
+      @start_row = index
+      @last_row += (@display_lines - 0)
+      if @last_row > ch.size - 1
+        @last_row = ch.size - 1
+        @start_row = (@last_row - @display_lines) + 1
+      end
+    elsif index < @start_row
+      @start_row = @start_row - @display_lines + 0
+      @start_row = 0 if @start_row < 0
+      @last_row = @start_row + @display_lines - 1
+    end
   end
 
-  $sel_marker = 'o'
-  $uns_marker = ' '
-
-  def print_full ch, index
+  def print_full ch, index   # {{{
+    if ch.size < @display_lines
+      @display_lines = ch.size
+    end
+    fix_rows index, ch
     ch.each_with_index { |e, ix|
+      next if ix < @start_row
+      next if ix > @last_row
       if ix == index
         marker = $sel_marker
       else
@@ -62,16 +98,19 @@ class Smenu
       end
       puts "#{marker} #{e}"
     }
-
-  end
-  def print_partial ch, prev_index, index
+  end  # }}}
+  def print_partial ch, prev_index, index  # {{{
     # 
     # only print for two given indices
     # there is still some flicker since I am still printing a puts for the non lines
     # I don't know current cursor pos, so i can just jump to that position
+    fix_rows index, ch
     lines = ch.size 
+    lines = @display_lines
     lines.times { system "tput cuu1;" }
     ch.each_with_index { |e, ix|
+      next if ix < @start_row
+      next if ix > @last_row
       marker = nil
       if ix == index
         marker = $sel_marker
@@ -86,13 +125,14 @@ class Smenu
         #puts
       end
     }
-  end
+  end   # }}}
 
   def run ch
     Signal.trap("INT") do # SIGINT = control-C
       system "tput cnorm"
       exit
     end
+    c = nil
     prev_index = index = 0
     printed = false
     begin
@@ -100,14 +140,17 @@ class Smenu
       while true
   
         if printed
-          print_partial ch, prev_index, index
+          #print_partial ch, prev_index, index
+          lines = @display_lines
+          lines.times { system "tput cuu1;" }
+          print_full(ch, index) 
         else
           print_full(ch, index) unless printed
-          printed = true
+          printed = true 
         end
         # TODO save cursor here
         #system "tput sc"
-        yield index if block_given?
+        yield index , c if block_given?
         # TODO restore cursor here
         #system "tput rc"
         c = char_if_pressed
@@ -157,6 +200,7 @@ end # class
 if __FILE__ == $0
   #system "tput smcup"
   choices = %w{ ruby perl go elixir }
+  choices = ('a'..'z').to_a
   menu = Smenu.new
   sel = menu.run choices do |ix|
     system "tput el" 
