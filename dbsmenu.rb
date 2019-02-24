@@ -5,7 +5,7 @@
 #                for current line.
 #       Author:  r kumar
 #         Date: 2019-02-21 - 12:27
-#  Last update: 2019-02-22 15:12
+#  Last update: 2019-02-24 14:54
 #      License: MIT License
 # ----------------------------------------------------------------------------- #
 #
@@ -152,14 +152,17 @@ if __FILE__ == $0
       scrollrows.times {|j| system "tput cuu1;" }
       system "tput ed"
     end
-      scrollrows.times {|j| system "tput cud1;" }
+      #scrollrows.times {|j| system "tput cud1;" }
     if selected
       cols = db.columns(selected)
+      # why does next line not clear to end of screen
       system "tput ed"
       rs = get_rows selected, db
       sm = Smenu.new
       sm.run rs
-      #printdata cols, selected, db, _MAX_ROWS
+      system "tput ed"
+
+      printdata cols, selected, db, _MAX_ROWS
       if false
       puts
       puts "SELECT"
