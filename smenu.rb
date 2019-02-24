@@ -8,7 +8,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2019-02-21 - 09:33
 #      License: MIT
-#  Last update: 2019-02-23 09:37
+#  Last update: 2019-02-24 14:41
 # ----------------------------------------------------------------------------- #
 #  smenu.rb  Copyright (C) 2012-2019 j kepler
 # v1 - printed all lines after each press resulting in flicker
@@ -21,6 +21,11 @@
 # NOTE: print_partial was fine as long as there was no scrolling. with scrolling, 
 #       we need to print all rows again. 2019-02-23 
 require 'io/wait'
+
+# we need this to use getch and raw 
+# : https://ruby-doc.org/stdlib-2.1.0/libdoc/io/console/rdoc/IO.html
+require 'io/console'
+
 class Smenu
   attr_accessor :display_lines
   attr_accessor :transpose_flag
@@ -28,20 +33,40 @@ class Smenu
     @display_lines = 3
     @transpose_flag = false
     @start_row = 0
+    @sel_marker = '*'
+    @uns_marker = ' '
+
+    ## get input from keyboard, as there could be STDIN from pipe.
+    @ios = tty_open
   end
-  $sel_marker = '*'
-  $uns_marker = ' '
+
+  # we require this in case user pipes in data
+  def tty_open
+    fd = IO.sysopen "/dev/tty", "r"
+    ios = IO.new(fd, "r")
+    return ios
+  end
+
+  # we require this in case user pipes in data
+  def tty_getc
+    @ios.getch
+  end
+
   def char_if_pressed  # {{{
     #cn = nil
     begin
       system("stty raw -echo 2>/dev/null") # turn raw input on
-      c = $stdin.getc
+      #c = $stdin.getc
+      c = tty_getc
+      #return nil unless c
       if c == ''
         buff = c.chr
         while true
           k = nil
-          if $stdin.ready?
-            k = $stdin.getc
+          #if $stdin.ready?
+          if @ios.ready?
+            #k = $stdin.getc
+            k = tty_getc
             buff += k.chr
           else
             #puts "buff is:#{buff}"
@@ -92,14 +117,17 @@ class Smenu
       next if ix < @start_row
       next if ix > @last_row
       if ix == index
-        marker = $sel_marker
+        marker = @sel_marker
       else
-        marker = $uns_marker
+        marker = @uns_marker
       end
       puts "#{marker} #{e}"
     }
   end  # }}}
-  def print_partial ch, prev_index, index  # {{{
+
+  # now unused since scrolling requires reprinting all
+  def UNUSEDprint_partial ch, prev_index, index  # {{{
+    raise
     # 
     # only print for two given indices
     # there is still some flicker since I am still printing a puts for the non lines
@@ -113,9 +141,9 @@ class Smenu
       next if ix > @last_row
       marker = nil
       if ix == index
-        marker = $sel_marker
+        marker = @sel_marker
       elsif ix == prev_index
-        marker = $uns_marker
+        marker = @uns_marker
       end
       if marker
         system("tput el")
@@ -129,22 +157,26 @@ class Smenu
 
   def run ch
     Signal.trap("INT") do # SIGINT = control-C
-      system "tput cnorm"
+      reset_terminal
       exit
     end
     c = nil
     prev_index = index = 0
     printed = false
     begin
+      #system "tput smcup" # clears the screen
+      #system "tput ed"
       system "tput civis" # hide cursor
       while true
   
         if printed
+          # after first time
           #print_partial ch, prev_index, index
           lines = @display_lines
           lines.times { system "tput cuu1;" }
           print_full(ch, index) 
         else
+          # first time
           print_full(ch, index) unless printed
           printed = true 
         end
@@ -154,14 +186,8 @@ class Smenu
         # TODO restore cursor here
         #system "tput rc"
         c = char_if_pressed
+        next unless c
 
-        # clear as many lines as printed only
-        #lines = ch.size 
-        #lines.times { system "tput cuu1;tput el" }
-        #lines.times { system "tput cuu1;" }
-        # TODO to prevent flicker only clear the TWO lines to change and print them
-        # only if index has changed
-        # -------
 
         break if c == 113 or c == 'q'
         prev_index = index
@@ -193,23 +219,42 @@ class Smenu
         index = ch.size-1 if index > ch.size-1
       end
     ensure
-      system "tput cnorm" # unhide cursor
+      reset_terminal
     end
   end
+
+  # bring cursor back up to the start, hopefully. This really needs to be improved.
+  def reset_terminal
+    lines = @display_lines
+    lines.times { system "tput cuu1;" }
+    system "tput cnorm" # unhide cursor
+  end
+
 end # class
 if __FILE__ == $0
-  #system "tput smcup"
-  choices = %w{ ruby perl go elixir }
-  choices = ('a'..'z').to_a
-  menu = Smenu.new
-  sel = menu.run choices do |ix|
-    system "tput el" 
-    lang = choices[ix]
-    puts "You selected #{lang}"
-    #str = %x{ brew info #{lang} 2>/dev/null | head -n 3 }
-    #puts str
-    1.times { system "tput cuu1;" }
+  # Keep reading lines of input as long as they're coming.
+  if ARGV.count == 0
+    choices = []
+    while input = ARGF.gets
+      input.each_line do |line|
+        line = line.chomp
+        choices << line
+      end
+    end
+    $stdin.flush
+    #system "tput smcup"
+    #choices = %w{ ruby perl go elixir }
+    #choices = ('a'..'z').to_a
+    menu = Smenu.new
+    sel = menu.run choices do |ix|
+      system "tput el" 
+      lang = choices[ix]
+      puts "You selected #{lang}"
+      #str = %x{ brew info #{lang} 2>/dev/null | head -n 3 }
+      #puts str
+      1.times { system "tput cuu1;" }
+    end
+    #system "tput rmcup"
+    puts sel if sel
   end
-  #system "tput rmcup"
-  puts sel if sel
 end
