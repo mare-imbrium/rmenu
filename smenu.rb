@@ -5,16 +5,18 @@
 #                with arrow keys and ENTER. q to quit.
 #                It does not clear screen but only the lines it prints on. 
 #                It is meant to be a simple version of `smenu`.
-#       Author: j kepler  http://github.com/mare-imbrium/canis/
+#       Author: j kepler  http://github.com/mare-imbrium/
 #         Date: 2019-02-21 - 09:33
 #      License: MIT
-#  Last update: 2019-02-24 14:41
+#  Last update: 2019-02-25 15:04
 # ----------------------------------------------------------------------------- #
 #  smenu.rb  Copyright (C) 2012-2019 j kepler
 # v1 - printed all lines after each press resulting in flicker
 # v2 - print only affected two lines (prev and current index)
 # v3 - a separate version which allows printing detail below for curr index
-# TODO 2019-02-22 - handle scrolling
+# DONE 2019-02-22 - handle scrolling
+# TODO 2019-02-25 - if scrolling fast, then arrow key codes show up on screen
+# DONE 2019-02-25 - may need a label on top
 
 # 2019-02-21 - this passes a block so we can print below. but we need to ensure
 #   we back up as many rows as we write. would have been nice to save and restore cursor
@@ -28,9 +30,12 @@ require 'io/console'
 
 class Smenu
   attr_accessor :display_lines
+  attr_accessor :message
   attr_accessor :transpose_flag
+  attr_accessor :on_enter_block
   def initialize
-    @display_lines = 3
+    @display_lines = 5
+    @message = nil
     @transpose_flag = false
     @start_row = 0
     @sel_marker = '*'
@@ -39,11 +44,16 @@ class Smenu
     ## get input from keyboard, as there could be STDIN from pipe.
     @ios = tty_open
   end
+  def on_enter &block
+    @on_enter_block = block
+  end
 
   # we require this in case user pipes in data
   def tty_open
     fd = IO.sysopen "/dev/tty", "r"
     ios = IO.new(fd, "r")
+    #ios.echo = false   # tried this since fast scrolling shows up on screen
+    #ios.raw!   # messes newline the first time
     return ios
   end
 
@@ -58,7 +68,6 @@ class Smenu
       system("stty raw -echo 2>/dev/null") # turn raw input on
       #c = $stdin.getc
       c = tty_getc
-      #return nil unless c
       if c == ''
         buff = c.chr
         while true
@@ -121,6 +130,7 @@ class Smenu
       else
         marker = @uns_marker
       end
+      system "tput el"    # clear line since scrolling
       puts "#{marker} #{e}"
     }
   end  # }}}
@@ -163,11 +173,12 @@ class Smenu
     c = nil
     prev_index = index = 0
     printed = false
+    puts "#{message}" if @message
     begin
       #system "tput smcup" # clears the screen
       #system "tput ed"
-      system "tput civis" # hide cursor
       while true
+        system "tput civis" # hide cursor
   
         if printed
           # after first time
@@ -196,10 +207,12 @@ class Smenu
           index += 1
         when 'k' # 107
           index -= 1
-        when 13
-          return ch[index]
         when "ENTER"
-          return ch[index]
+          if @on_enter_block
+            @on_enter_block.call(index)
+          else
+            return ch[index]
+          end
         when "[B"
           index += 1
         when "[A"
@@ -232,20 +245,68 @@ class Smenu
 
 end # class
 if __FILE__ == $0
+  $opt_verbose = false
+  $opt_debug = false
+  $opt_quiet = false
+  begin
+    # http://www.ruby-doc.org/stdlib/libdoc/optparse/rdoc/classes/OptionParser.html
+    require 'optparse'
+    options = {}
+    OptionParser.new do |opts|
+      opts.banner = "Usage: #{$0} [options]"
+
+      opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+        $opt_verbose = v
+      end
+      opts.on("--debug", "Show debug info") do 
+        $opt_debug = true
+      end
+      opts.on("-q", "--quiet", "Run quietly") do |v|
+        $opt_quiet = true
+      end
+      #opts.on("-nNAME", "--name=NAME", "Name to say hello to") do |n|
+      #end
+      opts.on('-n LINES', Integer, "Lines to show")
+      opts.on('-m MESSAGE', String, "Prompt to show")
+
+    end.parse!(into: options)
   # Keep reading lines of input as long as they're coming.
   if ARGV.count == 0
     choices = []
-    while input = ARGF.gets
-      input.each_line do |line|
-        line = line.chomp
-        choices << line
+
+    # take input from a pipe, however this gives errors from vim
+    # works fine if pager most is used
+    if !STDIN.tty?
+      while input = ARGF.gets
+        input.each_line do |line|
+          line = line.chomp
+          choices << line
+        end
       end
+      $stdin.flush
+      $stdin.close
+    else
+      # if nothing passed, then make some dir entries
+      choices = Dir.entries('.').select { |e| File.file?(e) }
     end
-    $stdin.flush
     #system "tput smcup"
     #choices = %w{ ruby perl go elixir }
     #choices = ('a'..'z').to_a
     menu = Smenu.new
+    menu.display_lines = options[:n] if options[:n]
+    menu.message = options[:m] if options[:m]
+    menu.on_enter do |ix|
+      file = choices[ix]
+      if File.exist? file
+        #system "smcup"
+        # vim warning about not a terminal, and screen gets messed up after
+        system "most #{file}"
+        #system "stty sane"
+        #system "rmcup"
+        # may need to hide cursor or reset terminal etc here
+        #system "cat #{file} | vim -R -" # this works but its a noname file
+      end
+    end
     sel = menu.run choices do |ix|
       system "tput el" 
       lang = choices[ix]
@@ -256,5 +317,6 @@ if __FILE__ == $0
     end
     #system "tput rmcup"
     puts sel if sel
-  end
-end
+  end # if ARGV
+  end # begin
+end # if FILE
