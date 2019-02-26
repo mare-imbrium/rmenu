@@ -1,4 +1,4 @@
-== smenu
+## smenu
 
 Inspired by the `smenu` command.
 
