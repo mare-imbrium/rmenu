@@ -4,6 +4,7 @@ Inspired by the `smenu` command.
 
 This is a ruby program that can be used to get interactive menus that can display
 some text as user scrolls down the list.
+
 Also, if user presses ENTER a program may be launched if defined.
 
 The caller will use a block to specify what is to be displayed when a row becomes current, as well as what program is to be launched when ENTER is pressed.
