@@ -8,7 +8,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/
 #         Date: 2019-02-21 - 09:33
 #      License: MIT
-#  Last update: 2019-02-26 23:16
+#  Last update: 2019-02-27 00:08
 # ----------------------------------------------------------------------------- #
 #  smenu.rb  Copyright (C) 2012-2019 j kepler
 # v1 - printed all lines after each press resulting in flicker
@@ -28,6 +28,11 @@ require 'io/wait'
 # : https://ruby-doc.org/stdlib-2.1.0/libdoc/io/console/rdoc/IO.html
 require 'io/console'
 
+# color constants
+CLEAR      = "\e[0m"
+# The start of an ANSI bold sequence.
+BOLD       = "\e[1m"
+
 class Smenu
 
   # how many lines to display
@@ -39,6 +44,9 @@ class Smenu
   # TODO transpose choices
   attr_accessor :transpose_flag
 
+  # multiple selection
+  attr_accessor :multiple_flag
+
   # block to call when ENTER pressed
   attr_accessor :on_enter_block
 
@@ -46,6 +54,7 @@ class Smenu
     @display_lines = 5
     @message = nil
     @transpose_flag = false
+    @multiple_flag = false
     @start_row = 0
     @sel_marker = '*'
     @uns_marker = ' '
@@ -116,7 +125,7 @@ class Smenu
     end
   end  # }}}
 
-  # fix start and finish index when scrolling
+  # fix start and finish index when scrolling     {{{
   # modifies start_row and last_row
   # @param Integer current index
   # @param Array choices
@@ -134,7 +143,7 @@ class Smenu
       @start_row = 0 if @start_row < 0
       @last_row = @start_row + @display_lines - 1
     end
-  end
+  end # }}}
 
   def print_full choices, index   # {{{
     if choices.size < @display_lines
@@ -149,8 +158,15 @@ class Smenu
       else
         marker = @uns_marker
       end
+      bold = clear = nil
+      if @multiple_flag
+        if @selection.include? e
+          bold = BOLD
+          clear = CLEAR
+        end
+      end
       system "tput el"    # clear line since scrolling
-      puts "#{marker} #{e}"
+      puts "#{marker} #{bold}#{e}#{clear}"
     }
   end  # }}}
 
@@ -192,6 +208,8 @@ class Smenu
     c = nil
     prev_index = index = 0
     printed = false
+    @selection = nil
+    @selection = [] if @multiple_flag
     puts "#{message}" if @message
     begin
       #system "tput smcup" # clears the screen
@@ -226,11 +244,25 @@ class Smenu
           index += 1
         when 'k' # 107
           index -= 1
+        when 't'
+          # tag the current row for selection, toggle
+          if @multiple_flag
+            e = choices[index]
+            if @selection.include? choices[index]
+              @selection.delete e
+            else
+              @selection << choices[index]
+            end
+          end
         when "ENTER"
           if @on_enter_block
             @on_enter_block.call(index)
           else
-            return choices[index]
+            if @multiple_flag
+              return @selection
+            else
+              return choices[index]
+            end
           end
         when "[B"     # down arrow
           index += 1
@@ -287,8 +319,11 @@ if __FILE__ == $0
       #end
       opts.on('-n LINES', Integer, "Lines to show")
       opts.on('-m MESSAGE', String, "Prompt to show")
+      opts.on('-c', "--command=String", "Command to execute for ENTER")
+      opts.on("-T", "--multiple", "Multiple selection using t") 
 
     end.parse!(into: options)
+    puts options if $opt_debug
   # Keep reading lines of input as long as they're coming.
   if ARGV.count == 0
     choices = []
@@ -313,17 +348,21 @@ if __FILE__ == $0
     #choices = ('a'..'z').to_a
     menu = Smenu.new
     menu.display_lines = options[:n] if options[:n]
+    menu.multiple_flag = options[:multiple] if options[:multiple]
     menu.message = options[:m] if options[:m]
-    menu.on_enter do |ix|
-      file = choices[ix]
-      if File.exist? file
-        #system "smcup"
-        # vim warning about not a terminal, and screen gets messed up after
-        system "most #{file}"
-        #system "stty sane"
-        #system "rmcup"
-        # may need to hide cursor or reset terminal etc here
-        #system "cat #{file} | vim -R -" # this works but its a noname file
+    if options[:command] || options[:c]
+      menu.on_enter do |ix|
+        file = choices[ix]
+        if File.exist? file
+          #system "smcup"
+          # vim warning about not a terminal, and screen gets messed up after
+          command = options[:command] || options[:c]
+          system "#{command} #{file}"
+          #system "stty sane"
+          #system "rmcup"
+          # may need to hide cursor or reset terminal etc here
+          #system "cat #{file} | vim -R -" # this works but its a noname file
+        end
       end
     end
     sel = menu.run choices do |ix|
