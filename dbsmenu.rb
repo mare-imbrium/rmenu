@@ -1,16 +1,16 @@
 #!/usr/bin/env ruby
 # ----------------------------------------------------------------------------- #
 #         File: test.rb
-#  Description: this file tests smenu.rb and show table info as the second portion
+#  Description: this file tests rmenu.rb and show table info as the second portion
 #                for current line.
 #       Author:  r kumar
 #         Date: 2019-02-21 - 12:27
-#  Last update: 2019-02-24 14:54
+#  Last update: 2019-03-05 09:38
 #      License: MIT License
 # ----------------------------------------------------------------------------- #
 #
 require 'logger'
-require './smenu.rb'
+require './rmenu.rb'
 #require 'sqlite3'
 # get_first_value  get_first_row
 # http://www.rubydoc.info/github/luislavena/sqlite3-ruby/SQLite3/Database
@@ -34,7 +34,7 @@ class Cli_Sqlite3 # {{{
   end
 
   # @return Array of tablenames
-  def tables 
+  def tables
     tables=%x{ sqlite3 #{@dbname} ".tables" | tr -s ' ' | tr ' ' '\n' }
     return tables.split("\n")
   end
@@ -69,9 +69,9 @@ end # }}}
 
     def printcols cols
       ncols = transpose(cols, 3)
-      3.times {|j| 
+      3.times {|j|
         system "tput el"
-        puts ncols[j] 
+        puts ncols[j]
       }
     end
     def printdata cols, selected, db, max_rows=3
@@ -118,7 +118,7 @@ if __FILE__ == $0
         options[:verbose] = v
         $opt_verbose = v
       end
-      opts.on("--debug", "Show debug info") do 
+      opts.on("--debug", "Show debug info") do
         options[:debug] = true
         $opt_debug = true
       end
@@ -131,7 +131,7 @@ if __FILE__ == $0
     p ARGV if $opt_debug
 
     # --- if processing just one file ---------
-    filename=ARGV[0] || exit 
+    filename=ARGV[0] || exit
     unless File.exist? filename
       $stderr.puts "File: #{filename} does not exist. Aborting"
       exit 1
@@ -139,7 +139,7 @@ if __FILE__ == $0
     db = Cli_Sqlite3.new filename
     _tables = db.tables()
     #puts "#{_tables} #{_tables.count}"
-    menu = Smenu.new
+    menu = Rmenu.new
     scrollrows = _MAX_ROWS + 1
     selected = menu.run _tables do |ix, key|
       tb = _tables[ix]
@@ -158,7 +158,7 @@ if __FILE__ == $0
       # why does next line not clear to end of screen
       system "tput ed"
       rs = get_rows selected, db
-      sm = Smenu.new
+      sm = Rmenu.new
       sm.run rs
       system "tput ed"
 
