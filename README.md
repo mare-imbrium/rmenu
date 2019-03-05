@@ -1,4 +1,6 @@
-## smenu
+## rmenu
+
+Stage: Alpha
 
 Inspired by the `smenu` command.
 
